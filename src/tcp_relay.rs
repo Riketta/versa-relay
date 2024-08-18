@@ -30,7 +30,7 @@ impl TcpRelay {
             let (local, _) = listener.accept().await?;
             let remote = TcpStream::connect((self.server_addr.as_str(), self.server_port))
                 .await
-                .unwrap();
+                .unwrap(); // TODO: handle.
 
             println!("[{:?}] New client connecting to server.", local.peer_addr());
 
