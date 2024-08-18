@@ -2,7 +2,8 @@ use anyhow::Result;
 use std::{
     io::{BufRead, BufReader, Read, Write},
     net::{TcpListener, TcpStream},
-    thread,
+    sync::atomic::{AtomicUsize, Ordering},
+    thread::{self, JoinHandle},
 };
 
 pub struct TcpRelay {
@@ -27,7 +28,7 @@ impl TcpRelay {
 
             println!("[{addr}] New client connecting to server.");
 
-            thread::spawn(move || TcpRelay::handle_connection(client, server));
+            TcpRelay::spawn_job(move || TcpRelay::handle_connection(client, server));
         }
     }
 
@@ -38,13 +39,34 @@ impl TcpRelay {
         // Forward data from client to server.
         let identifier = format!("{} -> Server", client_write.peer_addr().unwrap());
         let _handle =
-            thread::spawn(move || TcpRelay::forwarder(client_read, server_write, identifier));
+            TcpRelay::spawn_job(move || TcpRelay::forwarder(client_read, server_write, identifier));
 
         // Forward data from server to client.
         let identifier = format!("{} <- Server", client_write.peer_addr().unwrap());
         TcpRelay::forwarder(server_read, client_write, identifier);
 
         Ok(())
+    }
+
+    fn spawn_job<F, T>(f: F) -> JoinHandle<T>
+    where
+        F: FnOnce() -> T,
+        F: Send + 'static,
+        T: Send + 'static,
+    {
+        static ATOMIC_ID: AtomicUsize = AtomicUsize::new(0);
+
+        let handle = thread::spawn(move || {
+            let id: usize = ATOMIC_ID.fetch_add(1, Ordering::SeqCst);
+            println!("[Thread] Spawning thread #{id}.");
+            let result = f();
+            println!("[Thread] Thread #{id} done.");
+            ATOMIC_ID.fetch_sub(1, Ordering::SeqCst);
+
+            result
+        });
+
+        handle
     }
 
     fn forwarder<S: Read, R: Write>(mut sender: S, mut receiver: R, identifier: String) {
