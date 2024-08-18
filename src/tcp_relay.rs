@@ -1,3 +1,5 @@
+use std::thread;
+
 use anyhow::Result;
 use bytes::BytesMut;
 use tokio::{
@@ -34,25 +36,26 @@ impl TcpRelay {
 
             println!("[{:?}] New client connecting to server.", local.peer_addr());
 
-            tokio::spawn(async move { TcpRelay::handle_connection(local, remote).await.unwrap() });
+            thread::spawn(move || TcpRelay::handle_connection(local, remote));
+            // tokio::spawn(async move { TcpRelay::handle_connection(local, remote) }.await);
         }
     }
 
-    async fn handle_connection(client: TcpStream, server: TcpStream) -> Result<()> {
+    fn handle_connection(client: TcpStream, server: TcpStream) -> Result<()> {
         let (client_read, client_write) = client.into_split();
         let (server_read, server_write) = server.into_split();
 
         // Forward data from client to server.
         let identifier = format!("{} -> Server", client_write.peer_addr().unwrap());
-        let _handle = tokio::spawn(async move {
+        let _handle = thread::spawn(move || async {
             TcpRelay::forwarder(client_read, server_write, identifier).await;
         });
 
         // Forward data from server to client.
         let identifier = format!("{} <- Server", client_write.peer_addr().unwrap());
-        TcpRelay::forwarder(server_read, client_write, identifier).await;
-
-        // handle.await?;
+        let _handle = thread::spawn(move || async {
+            TcpRelay::forwarder(server_read, client_write, identifier).await;
+        });
 
         Ok(())
     }
