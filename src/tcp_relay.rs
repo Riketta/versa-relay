@@ -1,25 +1,31 @@
 use anyhow::Result;
 use std::{
     io::{BufRead, BufReader, Read, Write},
+    marker::PhantomData,
     net::{TcpListener, TcpStream},
     sync::atomic::{AtomicUsize, Ordering},
     thread::{self, JoinHandle},
 };
 
-pub struct TcpRelay {
+pub struct Ready;
+pub struct Running;
+
+pub struct TcpRelay<T = Ready> {
     server_addr: String,
     server_port: u16,
+    state: PhantomData<T>,
 }
 
 impl TcpRelay {
-    pub fn new(address: String, port: u16) -> TcpRelay {
+    pub fn new(address: String, port: u16) -> TcpRelay<Ready> {
         TcpRelay {
             server_addr: address,
             server_port: port,
+            state: PhantomData,
         }
     }
 
-    pub fn start(&self) -> Result<()> {
+    pub fn start(self) -> ! {
         let listener = TcpListener::bind(("0.0.0.0", self.server_port)).unwrap();
 
         loop {
