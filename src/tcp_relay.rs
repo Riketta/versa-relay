@@ -23,8 +23,21 @@ impl TcpRelay {
         let listener = TcpListener::bind(("0.0.0.0", self.server_port)).unwrap();
 
         loop {
-            let (client, addr) = listener.accept().unwrap();
-            let server = TcpStream::connect((self.server_addr.as_str(), self.server_port)).unwrap(); // TODO: handle.
+            let (client, addr) = match listener.accept() {
+                Ok(client) => client,
+                Err(e) => {
+                    eprintln!("Failed to accept client connection: {e}.");
+                    continue;
+                }
+            };
+            let server = match TcpStream::connect((self.server_addr.as_str(), self.server_port)) {
+                Ok(server) => server,
+                Err(e) => {
+                    eprintln!("Failed to connect to server: {e}.");
+                    client.shutdown(std::net::Shutdown::Both).ok();
+                    continue;
+                }
+            };
 
             println!("[{addr}] New client connecting to server.");
 
