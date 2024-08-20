@@ -3,22 +3,29 @@ use std::{
     io::{BufRead, BufReader, Read, Write},
     marker::PhantomData,
     net::{TcpListener, TcpStream},
-    sync::atomic::{AtomicUsize, Ordering},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc, Mutex,
+    },
     thread::{self, JoinHandle},
 };
+
+use crate::{IgnorePoisoned, ThreadPool};
 
 pub struct Ready;
 pub struct Running;
 
 pub struct TcpRelay<T = Ready> {
+    thread_pool: Arc<Mutex<ThreadPool>>,
     server_addr: String,
     server_port: u16,
     state: PhantomData<T>,
 }
 
 impl TcpRelay {
-    pub fn new(address: String, port: u16) -> TcpRelay<Ready> {
+    pub fn new(thread_pool: ThreadPool, address: String, port: u16) -> TcpRelay<Ready> {
         TcpRelay {
+            thread_pool: Arc::new(Mutex::new(thread_pool)),
             server_addr: address,
             server_port: port,
             state: PhantomData,
@@ -47,45 +54,32 @@ impl TcpRelay {
 
             println!("[{addr}] New client connecting to server.");
 
-            TcpRelay::spawn_job(move || TcpRelay::handle_connection(client, server));
+            let thread_pool = Arc::clone(&self.thread_pool);
+            self.thread_pool
+                .lock()
+                .ignore_poisoned()
+                .execute(move || TcpRelay::handle_connection(client, server, thread_pool));
         }
     }
 
-    fn handle_connection(client: TcpStream, server: TcpStream) -> Result<()> {
+    fn handle_connection(
+        client: TcpStream,
+        server: TcpStream,
+        thread_pool: Arc<Mutex<ThreadPool>>,
+    ) {
         let (client_read, client_write) = (client.try_clone().unwrap(), client);
         let (server_read, server_write) = (server.try_clone().unwrap(), server);
 
         // Forward data from client to server.
         let identifier = format!("{} -> Server", client_write.peer_addr().unwrap());
-        let _handle =
-            TcpRelay::spawn_job(move || TcpRelay::forwarder(client_read, server_write, identifier));
+        thread_pool
+            .lock()
+            .ignore_poisoned()
+            .execute(move || TcpRelay::forwarder(client_read, server_write, identifier));
 
         // Forward data from server to client.
         let identifier = format!("{} <- Server", client_write.peer_addr().unwrap());
         TcpRelay::forwarder(server_read, client_write, identifier);
-
-        Ok(())
-    }
-
-    fn spawn_job<F, T>(f: F) -> JoinHandle<T>
-    where
-        F: FnOnce() -> T,
-        F: Send + 'static,
-        T: Send + 'static,
-    {
-        static ATOMIC_ID: AtomicUsize = AtomicUsize::new(0);
-
-        let handle = thread::spawn(move || {
-            let id: usize = ATOMIC_ID.fetch_add(1, Ordering::SeqCst);
-            println!("[Thread] Spawning thread #{id}.");
-            let result = f();
-            println!("[Thread] Thread #{id} done.");
-            ATOMIC_ID.fetch_sub(1, Ordering::SeqCst);
-
-            result
-        });
-
-        handle
     }
 
     fn forwarder<S: Read, R: Write>(mut sender: S, mut receiver: R, identifier: String) {
