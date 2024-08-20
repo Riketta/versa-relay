@@ -70,6 +70,8 @@ impl TcpRelay {
         let (client_read, client_write) = (client.try_clone().unwrap(), client);
         let (server_read, server_write) = (server.try_clone().unwrap(), server);
 
+        // TODO: use one thread per client?
+
         // Forward data from client to server.
         let identifier = format!("{} -> Server", client_write.peer_addr().unwrap());
         thread_pool
