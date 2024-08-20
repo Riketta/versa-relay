@@ -55,7 +55,13 @@ impl Worker {
                 println!("[ThreadPool] Worker #{id} waiting for tasks.");
 
                 loop {
-                    let task = receiver.lock().ignore_poisoned().recv().unwrap(); // TODO: handle.
+                    let task = match receiver.lock().ignore_poisoned().recv() {
+                        Ok(task) => task,
+                        Err(e) => {
+                            println!("[ThreadPool] Worker #{id} shutting down: {e}.");
+                            break;
+                        }
+                    };
 
                     println!("[ThreadPool] Worker #{id} got a task.");
                     worker_counter.busy(task);
