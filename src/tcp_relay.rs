@@ -71,6 +71,7 @@ impl TcpRelay {
         let (server_read, server_write) = (server.try_clone().unwrap(), server);
 
         // TODO: use one thread per client?
+        // TODO: if one of the side has closed one of its streams close the connection for the other?
 
         // Forward data from client to server.
         let identifier = format!("{} -> Server", client_write.peer_addr().unwrap());
