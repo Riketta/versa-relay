@@ -55,9 +55,7 @@ impl Worker {
                 println!("[ThreadPool] Worker #{id} waiting for tasks.");
 
                 loop {
-                    let guard = receiver.lock().ignore_poisoned();
-                    let task = guard.recv().unwrap(); // TODO: handle.
-                    std::mem::drop(guard);
+                    let task = receiver.lock().ignore_poisoned().recv().unwrap(); // TODO: handle.
 
                     println!("[ThreadPool] Worker #{id} got a task.");
                     worker_counter.busy(task);
