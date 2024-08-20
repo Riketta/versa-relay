@@ -107,7 +107,10 @@ impl ThreadPool {
     }
 
     fn spawn_worker(&mut self) {
-        assert!(self.workers.len() < self.max_workers, "Maximum number of workers exceeded!");
+        assert!(
+            self.workers.len() < self.max_workers,
+            "Maximum number of workers exceeded!"
+        );
 
         let id = self.worker_counter.next_id();
         let worker = Worker::new(
