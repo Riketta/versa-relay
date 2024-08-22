@@ -1,16 +1,10 @@
-use anyhow::Result;
 use std::{
-    io::{BufRead, BufReader, Read, Write},
     marker::PhantomData,
     net::{TcpListener, TcpStream},
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc, Mutex,
-    },
-    thread::{self, JoinHandle},
+    sync::{Arc, Mutex},
 };
 
-use crate::{IgnorePoisoned, ThreadPool};
+use crate::{Connection, IgnorePoisoned, ThreadPool};
 
 pub struct Ready;
 pub struct Running;
@@ -67,60 +61,6 @@ impl TcpRelay {
         server: TcpStream,
         thread_pool: Arc<Mutex<ThreadPool>>,
     ) {
-        let (client_read, client_write) = (client.try_clone().unwrap(), client);
-        let (server_read, server_write) = (server.try_clone().unwrap(), server);
-
-        // TODO: use one thread per client?
-        // TODO: if one of the side has closed one of its streams close the connection for the other?
-
-        // Forward data from client to server.
-        let identifier = format!("{} -> Server", client_write.peer_addr().unwrap());
-        thread_pool
-            .lock()
-            .ignore_poisoned()
-            .execute(move || TcpRelay::forwarder(client_read, server_write, identifier));
-
-        // Forward data from server to client.
-        let identifier = format!("{} <- Server", client_write.peer_addr().unwrap());
-        TcpRelay::forwarder(server_read, client_write, identifier);
-    }
-
-    fn forwarder<S: Read, R: Write>(mut sender: S, mut receiver: R, identifier: String) {
-        let mut reader = BufReader::with_capacity(1500, &mut sender);
-
-        loop {
-            let buffer = match reader.fill_buf() {
-                Ok(buffer) => buffer,
-                Err(e) => {
-                    eprintln!("[{identifier}] Failed to read data from the sender: {e}.");
-                    break;
-                }
-            };
-
-            let bytes_received = buffer.len();
-            if bytes_received == 0 {
-                println!("[{identifier}] Connection closed by the sender.");
-                break;
-            }
-
-            // println!(
-            //     "[{identifier}] Received {} byte(s) from the sender.",
-            //     bytes_received
-            // );
-
-            let bytes_sent = match receiver.write(buffer) {
-                Ok(0) => {
-                    eprintln!("[{identifier}] The receiver is no longer accepting data.",);
-                    break;
-                }
-                Ok(bytes_sent) => bytes_sent,
-                Err(e) => {
-                    eprintln!("[{identifier}] Error writing to the receiver: {}.", e);
-                    break;
-                }
-            };
-
-            reader.consume(bytes_sent);
-        }
+        Connection::handle(client, server, thread_pool);
     }
 }
