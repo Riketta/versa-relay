@@ -204,7 +204,12 @@ impl ThreadPool {
             println!("[ThreadPool] Sending {workers_to_kill} suicide requests.");
             for _ in 0..workers_to_kill {
                 self.sender
-                    .send(Box::new(|| panic!("exceeding threads cleanup"))) // TODO: Task(Task)/Abort enum.
+                    .send(Box::new(|| {
+                        panic!(
+                            "Exceeding threads cleanup: {:}.",
+                            thread::current().name().unwrap_or("unknown-thread")
+                        )
+                    })) // TODO: Task(Task)/Abort enum.
                     .unwrap();
             }
         }
