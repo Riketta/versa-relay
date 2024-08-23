@@ -13,16 +13,34 @@ use crate::IgnorePoisoned;
 
 type Task = Box<dyn FnOnce() + Send + 'static>;
 
+/// Panic resistant task context.
+struct BusyGuard {
+    busy_counter: Arc<AtomicUsize>,
+}
+
+impl Drop for BusyGuard {
+    fn drop(&mut self) {
+        let _ = self.busy_counter.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
+impl BusyGuard {
+    fn execute(self, task: Task) {
+        let _ = self.busy_counter.fetch_add(1, Ordering::Relaxed);
+        task(); // Can panic.
+    }
+}
+
 struct WorkerCounter {
     id_counter: AtomicUsize,
-    busy_counter: AtomicUsize,
+    busy_counter: Arc<AtomicUsize>,
 }
 
 impl WorkerCounter {
     fn new() -> Self {
         Self {
             id_counter: AtomicUsize::new(0),
-            busy_counter: AtomicUsize::new(0),
+            busy_counter: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -30,11 +48,10 @@ impl WorkerCounter {
         self.id_counter.fetch_add(1, Ordering::Relaxed)
     }
 
-    fn busy(&self, task: Task) {
-        // TODO: correct atomics usage.
-        let _ = self.busy_counter.fetch_add(1, Ordering::Relaxed);
-        task();
-        let _ = self.busy_counter.fetch_sub(1, Ordering::Relaxed);
+    fn busy(&self) -> BusyGuard {
+        BusyGuard {
+            busy_counter: Arc::clone(&self.busy_counter),
+        }
     }
 }
 
@@ -64,7 +81,7 @@ impl Worker {
                     };
 
                     println!("[ThreadPool] Worker #{id} got a task.");
-                    worker_counter.busy(task);
+                    worker_counter.busy().execute(task);
                     println!("[ThreadPool] Worker #{id} finished a task.");
                 }
             })
