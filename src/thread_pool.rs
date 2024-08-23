@@ -190,6 +190,7 @@ impl ThreadPool {
                 .saturating_sub(total_workers + idle_workers),
         );
 
+        // Spawn extra idle workers if necessary.
         if idle_workers_to_spawn > 0 {
             for _ in 0..self.max_idle_workers {
                 self.spawn_worker();
