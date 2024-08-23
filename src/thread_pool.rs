@@ -201,7 +201,7 @@ impl ThreadPool {
         if idle_workers > 2 * self.max_idle_workers {
             let workers_to_kill =
                 (total_workers - busy_workers).saturating_sub(self.max_idle_workers);
-            println!("[ThreadPool] Sending {workers_to_kill} suicide requests.");
+            println!("[ThreadPool] Sending {workers_to_kill} suicide requests. [Workers] Total: {total_workers}; Idle: {idle_workers}; To kill: {workers_to_kill}.");
             for _ in 0..workers_to_kill {
                 self.sender
                     .send(Box::new(|| {
