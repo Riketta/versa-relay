@@ -6,6 +6,12 @@ use std::{
 
 use crate::{IgnorePoisoned, ThreadPool};
 
+pub struct ConnectionHalf {
+    sender: TcpStream,
+    receiver: TcpStream,
+    connected: Arc<AtomicBool>,
+}
+
 pub struct Connection;
 
 impl Connection {
